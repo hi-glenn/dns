@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -34,6 +35,9 @@ type HandlerFunc func(ResponseWriter, *Msg)
 
 // ServeDNS calls f(w, r).
 func (f HandlerFunc) ServeDNS(w ResponseWriter, r *Msg) {
+
+	fmt.Println("🟢 miekg/server.go ServeDNS()")
+
 	f(w, r)
 }
 
@@ -291,6 +295,8 @@ func unlockOnce(l sync.Locker) func() {
 
 // ListenAndServe starts a nameserver on the configured address in *Server.
 func (srv *Server) ListenAndServe() error {
+	fmt.Printf("🟢 miekg ListenAndServe() in; net: %s; addr: %s;\n", srv.Net, srv.Addr)
+
 	unlock := unlockOnce(&srv.lock)
 	srv.lock.Lock()
 	defer unlock()
@@ -351,6 +357,8 @@ func (srv *Server) ListenAndServe() error {
 // ActivateAndServe starts a nameserver with the PacketConn or Listener
 // configured in *Server. Its main use is to start a server from systemd.
 func (srv *Server) ActivateAndServe() error {
+	fmt.Printf("🟢 miekg ActivateAndServe() in; net: %s; addr: %s;\n", srv.Net, srv.Addr)
+
 	unlock := unlockOnce(&srv.lock)
 	srv.lock.Lock()
 	defer unlock()
@@ -473,6 +481,10 @@ func (srv *Server) serveTCP(l net.Listener) error {
 		srv.conns[rw] = struct{}{}
 		srv.lock.Unlock()
 		wg.Add(1)
+
+		fmt.Printf("🟢 serveTCP() on tcp accept loop;\n")
+		fmt.Printf("🟢 miekg server.go 🏀 before go srv.serveTCPConn; net: %s; addr: %s; remote: %s;\n", srv.Net, srv.Addr, rw.RemoteAddr().String())
+
 		go srv.serveTCPConn(&wg, rw)
 	}
 
@@ -481,6 +493,8 @@ func (srv *Server) serveTCP(l net.Listener) error {
 
 // serveUDP starts a UDP listener for the server.
 func (srv *Server) serveUDP(l net.PacketConn) error {
+	fmt.Printf("🟢 miekg serveUDP(); net: %s; addr: %s;\n", srv.Net, srv.Addr)
+
 	defer l.Close()
 
 	reader := Reader(defaultReader{srv})
@@ -534,6 +548,10 @@ func (srv *Server) serveUDP(l net.PacketConn) error {
 			continue
 		}
 		wg.Add(1)
+
+		fmt.Printf("🟢 serveUDP() on udp read loop;\n")
+		fmt.Printf("🟢 miekg server.go 🥎 before go srv.serveUDPPacket; net: %s; addr: %s; remote: %s;\n", srv.Net, srv.Addr, sUDP.RemoteAddr().String())
+
 		go srv.serveUDPPacket(&wg, m, l, sUDP, sPC)
 	}
 
@@ -542,6 +560,8 @@ func (srv *Server) serveUDP(l net.PacketConn) error {
 
 // Serve a new TCP connection.
 func (srv *Server) serveTCPConn(wg *sync.WaitGroup, rw net.Conn) {
+	fmt.Printf("🟢 serveTCPConn();\n")
+
 	w := &response{tsigProvider: srv.tsigProvider(), tcp: rw}
 	if srv.DecorateWriter != nil {
 		w.writer = srv.DecorateWriter(w)
@@ -597,6 +617,8 @@ func (srv *Server) serveTCPConn(wg *sync.WaitGroup, rw net.Conn) {
 
 // Serve a new UDP request.
 func (srv *Server) serveUDPPacket(wg *sync.WaitGroup, m []byte, u net.PacketConn, udpSession *SessionUDP, pcSession net.Addr) {
+	fmt.Printf("🟢 serveUDPPacket();\n")
+
 	w := &response{tsigProvider: srv.tsigProvider(), udp: u, udpSession: udpSession, pcSession: pcSession}
 	if srv.DecorateWriter != nil {
 		w.writer = srv.DecorateWriter(w)
@@ -609,6 +631,8 @@ func (srv *Server) serveUDPPacket(wg *sync.WaitGroup, m []byte, u net.PacketConn
 }
 
 func (srv *Server) serveDNS(m []byte, w *response) {
+	fmt.Printf("🟢 miekg serveDNS: addr: %s; net: %s;\n", srv.Addr, srv.Net)
+
 	dh, off, err := unpackMsgHdr(m, 0)
 	if err != nil {
 		// Let client hang, they are sending crap; any reply can be used to amplify.
@@ -659,6 +683,8 @@ func (srv *Server) serveDNS(m []byte, w *response) {
 	if w.udp != nil && cap(m) == srv.UDPSize {
 		srv.udpPool.Put(m[:srv.UDPSize])
 	}
+
+	fmt.Printf("🟢 miekg server.go 🎃 begin plugin chain  before srv.Handler.ServeDNS(); net: %s; addr: %s;\n", srv.Net, srv.Addr)
 
 	srv.Handler.ServeDNS(w, req) // Writes back to the client
 }
